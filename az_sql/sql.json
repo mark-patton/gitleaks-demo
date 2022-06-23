@@ -1,0 +1,509 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "AADTenantId": {
+        "type": "string"
+      },
+      "advancedThreatProtectionEnabled": {
+          "type":"bool",
+          "defaultValue":true
+      },
+      "securityPoliciesEnabled": {
+          "type":"string",
+          "defaultValue":"Enabled"
+      },
+      "administratorLogin": {
+        "type": "string",
+        "metadata": {
+          "description": "The SQL Server administrator login"
+        }
+      },
+      "administratorLoginPassword": {
+        "type": "securestring",
+        "metadata": {
+          "description": "The SQL Server administrator login password."
+        }
+      },
+      "auditStorageAccount": {
+        "type": "string"
+      },
+      "businessUnit": {
+        "type": "string"
+      },
+      "databaseCollation": {
+        "type": "string",
+        "defaultValue": "SQL_Latin1_General_CP1_CI_AS",
+        "metadata": {
+          "description": "The SQL Database collation."
+        }
+      },
+      "databaseDtuMax": {
+        "type": "int",
+        "metadata": {
+          "description": "The Elastic Pool database DTU max."
+        }
+      },
+      "databaseDtuMin": {
+        "type": "int",
+        "defaultValue": 0,
+        "metadata": {
+          "description": "The Elastic Pool database DTU min."
+        }
+      },
+      "databasesettings": {
+        "type": "array",
+        "defaultValue": [
+          "UsingDefaultValue"
+        ],
+        "metadata": {
+          "description": "The SQL Databases names."
+        }
+      },
+      "DRlocation": {
+        "type": "string",
+        "defaultValue": "UK South"
+      },
+      "edition": {
+        "type": "string",
+        "defaultValue": "Standard",
+        "allowedValues": [
+          "Basic",
+          "Standard",
+          "Premium"
+        ],
+        "metadata": {
+          "description": "The Elastic Pool edition."
+        }
+      },
+        "elasticPoolName": {
+          "type": "string",
+          "metadata": {
+            "description": "The Elastic Pool name."
+          }
+        },
+      "emailgroup": {
+        "type": "string"
+      },
+      "enableSecurity": {
+        "type": "bool",
+        "defaultValue": true
+      },
+        "failoverGroupName": {
+          "type": "string"
+        },
+      "keyvault": {
+        "type": "string"
+      },
+      "location": {
+        "type": "string",
+        "defaultValue": "UK West"
+      },
+      "poolDtu": {
+        "type": "int",
+        "metadata": {
+          "description": "The Elastic Pool DTU."
+        }
+      },
+      "primaryserverName": {
+        "type": "string",
+        "metadata": {
+          "description": "The Primary SQL Server name."
+        }
+      },
+      "secondaryserverName": {
+        "type": "string",
+        "metadata": {
+          "description": "The Secondary SQL Server name."
+        }
+      },
+      "SQLAdminGroup": {
+        "type": "string"
+      },
+      "SQLAdminGroupSid": {
+        "type": "string"
+      },
+      "storageAccountType": {
+        "type": "string"
+      }
+    },
+    "variables": {
+      "singlequote": "'"
+    },
+    "resources": [
+      {
+        "apiVersion": "2014-04-01",
+        "location": "[parameters('location')]",
+        "name": "[parameters('primaryserverName')]",
+        "tags": {
+          "App Service": "SQL",
+          "Business Unit": "[parameters('businessUnit')]",
+          "Environment": ""
+        },
+        "properties": {
+          "administratorLogin": "[parameters('administratorLogin')]",
+          "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+          "version": "12.0"
+        },
+        "type": "Microsoft.Sql/servers",
+        "resources": [
+          {
+            "type": "administrators",
+            "name": "activeDirectory",
+            "apiVersion": "2014-04-01-preview",
+            "properties": {
+              "administratorType": "ActiveDirectory",
+              "login": "[parameters('SQLAdminGroup')]",
+              "sid": "[parameters('SQLAdminGroupSid')]",
+              "tenantId": "[parameters('AADTenantId')]"
+            },
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('primaryServerName'))]","[concat('Microsoft.Storage/storageAccounts/', parameters('auditStorageAccount'))]"
+            ]
+          },
+          {
+            "apiVersion": "2017-03-01-preview",
+            "type": "Microsoft.Sql/servers/securityAlertPolicies",
+            "name": "[concat(parameters('primaryserverName'), '/securityAlertPolicies')]",
+            "properties": {
+              "state": "[parameters('securityPoliciesEnabled')]",
+              "disabledAlerts": [],
+              "emailAddresses": [
+                  "[parameters('emailgroup')]"
+                ],
+              "emailAccountAdmins": false
+            },
+            "dependsOn": [
+              "[parameters('primaryserverName')]"
+            ]
+          },
+          {
+            "type": "Microsoft.Sql/servers/vulnerabilityAssessments",
+            "name": "[concat(parameters('primaryserverName'), '/', 'vulnerabilityAssessments')]",
+            "condition": "[equals(parameters('enableSecurity'),bool('true'))]",
+            "apiVersion": "2018-06-01-preview",
+            "scale": null,
+            "properties": {
+              "storageContainerPath": "[concat('https', '://', parameters('auditStorageAccount'), '.blob.core.windows.net', '/vulnerability-assessment/')]",
+              "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').keys[0].value]",
+              "recurringScans": {
+                "isEnabled": "[parameters('enableSecurity')]",
+                "emailSubscriptionAdmins": false,
+                "emails": [
+                  "[parameters('emailgroup')]"
+                ]
+              }
+            },
+            "dependsOn": [
+              "[parameters('primaryserverName')]",
+              "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'), '/securityAlertPolicies/securityAlertPolicies')]"
+            ]
+          },
+          {
+            "apiVersion": "2017-03-01-preview",
+            "type": "auditingSettings",
+            "name": "DefaultAuditingSettings",
+            "dependsOn": [
+              "[parameters('primaryserverName')]"
+            ],
+            "properties": {
+              "state": "Enabled",
+              "storageEndpoint": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').PrimaryEndpoints.Blob]",
+              "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').keys[0].value]",
+              "storageAccountSubscriptionId": "[subscription().subscriptionId]",
+              "auditActionsAndGroups": null,
+              "isStorageSecondaryKeyInUse": false
+            }
+          },
+          {
+            "apiVersion": "2014-04-01",
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'))]"
+            ],
+            "location": "[parameters('location')]",
+            "name": "[concat(parameters('primaryserverName'), '/', parameters('elasticPoolName'))]",
+            "tags": {
+              "App Service": "SQL",
+              "Business Unit": "[parameters('businessUnit')]",
+              "Environment": "[parameters('databasesettings')[0].env]"
+            },
+            "scale": null,
+            "properties": {
+              "edition": "[parameters('edition')]",
+              "dtu": "[parameters('poolDtu')]",
+              "databaseDtuMin": "[parameters('databaseDtuMin')]",
+              "databaseDtuMax": "[parameters('databaseDtuMax')]"
+            },
+            "type": "Microsoft.Sql/servers/elasticPools",
+            "kind": "pool"
+          },
+          {
+            "apiVersion": "2014-04-01-preview",
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'))]"
+            ],
+            "location": "[parameters('location')]",
+            "name": "[concat(parameters('primaryserverName'), '/', 'AllowAllWindowsAzureIps')]",
+            "properties": {
+              "endIpAddress": "0.0.0.0",
+              "startIpAddress": "0.0.0.0"
+            },
+            "type": "Microsoft.Sql/servers/firewallrules"
+          }
+        ]
+      },
+      {
+        "type": "Microsoft.Sql/servers/databases",
+        "name": "[concat(parameters('primaryserverName'), '/', parameters('databasesettings')[copyIndex()].name)]",
+        "tags": {
+          "App Service": "SQL",
+          "Business Unit": "[parameters('businessUnit')]",
+          "Environment": "[parameters('databasesettings')[copyIndex()].env]"
+        },
+        "location": "[parameters('location')]",
+        "apiVersion": "2014-04-01-preview",
+        "dependsOn": [
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'))]",
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName') ,'/elasticpools/', parameters('elasticPoolName'))]"
+        ],
+        "properties": {
+          "collation": "[parameters('databaseCollation')]",
+          "requestedServiceObjectiveName": "ElasticPool",
+          "elasticPoolName": "[parameters('elasticPoolName')]"
+        },
+        "resources": [
+          {
+            "name": "Default",
+            "type": "backupLongTermRetentionPolicies",
+            "condition": "[equals(parameters('databasesettings')[copyIndex()].backup,bool('true'))]",
+            "dependsOn": [
+              "[resourceId('Microsoft.Sql/servers/databases', parameters('primaryserverName'), parameters('databasesettings')[copyIndex()].name)]"
+            ],
+            "apiVersion": "2017-03-01-preview",
+            "properties": {
+              "weeklyRetention": "P6W",
+              "monthlyRetention": "P56W",
+              "yearlyRetention": "P520W",
+              "weekOfYear": 1
+            }
+          }
+        ],
+        "copy": {
+          "name": "addDatabasesInElasticPool",
+          "count": "[length(parameters('databasesettings'))]"
+        }
+      },
+      {
+        "apiVersion": "2015-05-01-preview",
+        "name": "[concat(parameters('primaryserverName'), '/', parameters('failoverGroupName'),parameters('databasesettings')[copyIndex()].name)]",
+        "tags": {
+          "App Service": "SQL",
+          "Business Unit": "[parameters('businessUnit')]",
+          "Environment": "[parameters('databasesettings')[copyIndex()].env]"
+        },
+        "dependsOn": [
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'))]",
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName') ,'/elasticpools/', parameters('elasticPoolName'))]",
+          "[concat('Microsoft.Sql/servers/', parameters('secondaryserverName'))]",
+          "[concat('Microsoft.Sql/servers/', parameters('secondaryserverName'), '/elasticpools/', parameters('elasticPoolName'))]",
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'), '/databases/', parameters('databasesettings')[sub(length(parameters('databasesettings')),1)].name)]"
+        ],
+        "properties": {
+          "serverName": "[parameters('primaryserverName')]",
+          "partnerServers": [
+            {
+              "id": "[resourceId('Microsoft.Sql/servers/', parameters('secondaryserverName'))]"
+            }
+          ],
+          "readWriteEndpoint": {
+            "failoverPolicy": "Automatic",
+            "failoverWithDataLossGracePeriodMinutes": 60
+          },
+          "readOnlyEndpoint": {
+            "failoverPolicy": "Enabled"
+          },
+          "databases": [
+            "[resourceId('Microsoft.Sql/servers/databases', parameters('primaryserverName'), parameters('databasesettings')[copyIndex()].name)]"
+          ]
+        },
+        "copy": {
+          "name": "addDatabasesToFailoverGroup",
+          "count": "[length(parameters('databasesettings'))]"
+        },
+        "type": "Microsoft.Sql/servers/failoverGroups"
+      },
+      {
+        "apiVersion": "2014-04-01",
+        "location": "[parameters('DRlocation')]",
+        "name": "[parameters('secondaryserverName')]",
+        "tags": {
+          "App Service": "SQL",
+          "Business Unit": "[parameters('businessUnit')]",
+          "Environment": ""
+        },
+        "properties": {
+          "administratorLogin": "[parameters('administratorLogin')]",
+          "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+          "version": "12.0"
+        },
+        "type": "Microsoft.Sql/servers",
+        "resources": [
+          {
+            "type": "administrators",
+            "name": "activeDirectory",
+            "apiVersion": "2014-04-01-preview",
+            "properties": {
+              "administratorType": "ActiveDirectory",
+              "login": "[parameters('SQLAdminGroup')]",
+              "sid": "[parameters('SQLAdminGroupSid')]",
+              "tenantId": "[parameters('AADTenantId')]"
+            },
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('secondaryServerName'))]"
+            ]
+          },
+          {
+            "apiVersion": "2017-03-01-preview",
+            "type": "Microsoft.Sql/servers/securityAlertPolicies",
+            "name": "[concat(parameters('secondaryserverName'), '/securityAlertPolicies')]",
+            "properties": {
+              "state": "[parameters('securityPoliciesEnabled')]",
+              "disabledAlerts": [],
+              "emailAddresses": [
+                  "[parameters('emailgroup')]"
+                ],
+              "emailAccountAdmins": false
+            }, 
+            "dependsOn": [
+              "[parameters('secondaryserverName')]"
+            ]
+          },
+          {
+            "type": "Microsoft.Sql/servers/vulnerabilityAssessments",
+            "name": "[concat(parameters('secondaryserverName'), '/', 'vulnerabilityAssessments')]",
+            "condition": "[equals(parameters('enableSecurity'),bool('true'))]",
+            "apiVersion": "2018-06-01-preview",
+            "scale": null,
+            "properties": {
+              "storageContainerPath": "[concat('https://',parameters('auditStorageAccount'),'.blob.core.windows.net/vulnerability-assessment/')]",
+              "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').keys[0].value]",
+              "recurringScans": {
+                "isEnabled": "[parameters('enableSecurity')]",
+                "emailSubscriptionAdmins": false,
+                "emails": [
+                  "[parameters('emailgroup')]"
+                ]
+              }
+            },
+            "dependsOn": [
+              "[parameters('secondaryserverName')]",
+              "[concat('Microsoft.Sql/servers/', parameters('secondaryserverName'), '/securityAlertPolicies/securityAlertPolicies')]"
+            ]
+          },
+          {
+            "apiVersion": "2017-03-01-preview",
+            "type": "auditingSettings",
+            "name": "DefaultAuditingSettings",
+            "dependsOn": [
+              "[parameters('secondaryserverName')]"
+            ],
+            "properties": {
+              "state": "Enabled",
+              "storageEndpoint": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').PrimaryEndpoints.Blob]",
+              "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('auditStorageAccount')), '2018-03-01-preview').keys[0].value]",
+              "storageAccountSubscriptionId": "[subscription().subscriptionId]",
+              "auditActionsAndGroups": null,
+              "isStorageSecondaryKeyInUse": false
+            }
+          },
+          {
+            "apiVersion": "2014-04-01",
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('secondaryserverName'))]"
+            ],
+            "location": "[parameters('DRlocation')]",
+            "name": "[concat(parameters('secondaryserverName'), '/', parameters('elasticPoolName'))]",
+            "scale": null,
+            "properties": {
+              "edition": "[parameters('edition')]",
+              "dtu": "[parameters('poolDtu')]",
+              "databaseDtuMin": "[parameters('databaseDtuMin')]",
+              "databaseDtuMax": "[parameters('databaseDtuMax')]"
+            },
+            "type": "Microsoft.Sql/servers/elasticPools",
+            "kind": "pool"
+          },
+          {
+            "apiVersion": "2014-04-01-preview",
+            "dependsOn": [
+              "[concat('Microsoft.Sql/servers/', parameters('secondaryserverName'))]"
+            ],
+            "location": "[parameters('DRlocation')]",
+            "name": "[concat(parameters('secondaryserverName'), '/', 'AllowAllWindowsAzureIps')]",
+            "properties": {
+              "endIpAddress": "0.0.0.0",
+              "startIpAddress": "0.0.0.0"
+            },
+            "type": "Microsoft.Sql/servers/firewallrules"
+          }
+        ]
+      },
+      {
+        "type": "Microsoft.KeyVault/vaults/secrets",
+        "name": "[concat(parameters('keyvault'),'/connstr',parameters('databasesettings')[copyIndex()].name)]",
+        "tags": {
+          "App Service": "SQL",
+          "Business Unit": "[parameters('businessUnit')]",
+          "Environment": "[parameters('databasesettings')[copyIndex()].env]"
+        },
+        "apiVersion": "2015-06-01",
+        "properties": {
+          "value": "[concat('Server=tcp:fg',parameters('databasesettings')[copyIndex()].name,'.database.windows.net,1433;Initial Catalog=',parameters('databasesettings')[copyIndex()].name,';Persist Security Info=False;User ID=',variables('singlequote'),parameters('databasesettings')[copyIndex()].username,variables('singlequote'),';Password=',variables('singlequote'),'---',variables('singlequote'),';MultipleActiveResultSets=True;Encrypt=True;Max Pool Size=200;TrustServerCertificate=False;Connection Timeout=20;')]"
+        },
+        "copy": {
+          "name": "addConnectionStringToKeyVault",
+          "count": "[length(parameters('databasesettings'))]"
+        },
+        "dependsOn": [
+          "[concat('Microsoft.Sql/servers/', parameters('primaryserverName'), '/databases/', parameters('databasesettings')[copyIndex()].name)]"
+        ]
+      },
+      {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[parameters('auditStorageAccount')]",
+      "location": "[parameters('DRlocation')]",
+      "apiVersion": "2018-07-01",
+      "sku": {
+        "name": "[parameters('storageAccountType')]"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "supportsHttpsTrafficOnly": true,
+        "resources": [
+          {
+            "condition": "[parameters('advancedThreatProtectionEnabled')]",
+            "type": "providers/advancedThreatProtectionSettings",
+            "name": "Microsoft.Security/current",
+            "apiVersion": "2017-08-01-preview",
+            "dependsOn": [
+              "[resourceId('Microsoft.Storage/storageAccounts/', parameters('auditStorageAccount'))]"
+            ],
+            "properties": {
+              "isEnabled": true
+            }
+          }
+        ]
+      }
+    }
+    ],
+    "outputs": {
+      "secretarray": {
+        "type": "array",
+        "value": "[parameters('databasesettings')]"
+      },
+      "numberofdatabases": {
+        "type": "int",
+        "value": "[length(parameters('databasesettings'))]"
+      }
+    }
+  }

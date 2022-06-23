@@ -1,0 +1,122 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "AADTenantId": { 
+        "reference": {
+            "keyVault": {
+              "id": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/ElasticPool/providers/Microsoft.KeyVault/vaults/ManagementCore']"
+            },
+            "secretName": "aadtenantid"
+          }
+       },
+      "administratorLogin": {
+        "value": "sqladmin"
+      },
+      "administratorLoginPassword": {
+        "reference": {
+          "keyVault": {
+            "id": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/ElasticPool/providers/Microsoft.KeyVault/vaults/ManagementCore']"
+          },
+          "secretName": "sqlserveradminpassword"
+        }
+      },
+      "auditStorageAccount": {
+        "value": "markpattonstore"
+      },
+      "securityPoliciesEnabled":{
+        "value": "Enabled"
+      },
+      "advancedThreatProtectionEnabled":{
+          "value" :true
+      },
+      "businessUnit": {
+        "value": "Finance"
+      },
+      "databaseDtuMax": {
+        "value": 100
+      },
+      "databaseDtuMin": {
+        "value": 0
+      },
+      "databasesettings": {
+        "value": [
+          {
+            "name": "financedev",
+            "username": "financedev_api",
+            "secretname": "pwddevapi",
+            "backup": false,
+            "env": "dev"
+          },
+          {
+            "name": "financeaccept",
+            "username": "financeacceot_api",
+            "secretname": "pwdacceptapi",
+            "backup": false,
+            "env": "accept"
+          },
+          {
+            "name": "financepreprod",
+            "username": "financepreprod_api",
+            "secretname": "pwdpreprodapi",
+            "backup": false,
+            "env": "preprod"
+          },
+          {
+            "name": "financeaudit",
+            "username": "financeaudit_api",
+            "secretname": "pwdnonprodauditapi",
+            "backup": false,
+            "env": "managementcore"
+          }
+        ]
+      },
+      "location":{
+          "value":"North Europe"
+      },
+      "DRlocation":{
+          "value": "West Europe"
+      },
+      "edition": {
+        "value": "Standard"
+      },
+      "elasticPoolName": {
+        "value": "NonProductionPool"
+      },
+      "emailgroup": {
+        "value": "contact@markpatton.cloud"
+      },
+      "enableSecurity": {
+        "value": true
+      },
+      "failoverGroupName": {
+        "value": "fg"
+      },
+      "keyvault": {
+        "value": "ManagementCore"
+      },
+      "poolDtu": {
+        "value": 100
+      },
+      "primaryserverName": {
+        "value": "sqlnonprodp"
+      },
+      "secondaryserverName": {
+        "value": "sqlnonprods"
+      },
+      "SQLAdminGroup": {
+        "value": "SQLAdmins"
+      },
+      "SQLAdminGroupSid": {
+        "reference": {
+          "keyVault": {
+            "id": "/subscriptions/8db4f9c0-4ffc-457c-8742-9c5dd4224678/resourceGroups/ElasticPool/providers/Microsoft.KeyVault/vaults/ManagementCore"
+          },
+          "secretName": "SQLAdminGroupSid"
+        }
+      },
+      "storageAccountType":{
+          "value": "Standard_GRS"
+      }
+    }
+  }
